@@ -13,7 +13,8 @@ from PyInstaller.utils.hooks import collect_submodules, collect_all
 IS_WIN = sys.platform == "win32"
 frpc_bin = "frpc.exe" if IS_WIN else "frpc"
 
-hiddenimports = ["webview"] + collect_submodules("webview")
+hiddenimports = ["webview", "pystray"] + \
+    collect_submodules("webview") + collect_submodules("pystray")
 binaries = [(str(Path("vendor/frpc") / frpc_bin), ".")]
 datas = [
     ("frontend", "frontend"),
