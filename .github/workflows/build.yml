@@ -71,7 +71,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Linux：pywebview gtk 后端优先 WebKit2 4.1（回退 4.0），24.04 提供 4.1 + girepository-2.0
+      # Linux：pywebview gtk 后端优先 WebKit2 4.1（回退 4.0），24.04 提供 4.1 + girepository-2.0；
+      # 另加 AppIndicator 供 pystray 托盘使用
       - name: Install Linux GUI deps
         if: matrix.platform == 'linux'
         run: |
@@ -79,13 +80,14 @@ jobs:
           sudo apt-get install -y \
             libgtk-3-0 libwebkit2gtk-4.1-0 \
             gir1.2-webkit2-4.1 gir1.2-gtk-3.0 \
+            gir1.2-ayatanaappindicator3-0.1 \
             libgirepository-2.0-dev libcairo2-dev python3-dev pkg-config
 
       - name: Install Python deps
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pywebview==6.2.1 pyinstaller==6.22.2 pytest
+          python -m pip install pywebview==6.2.1 pyinstaller==6.22.2 pytest pystray pillow
           if [ "${{ matrix.platform }}" = "windows" ]; then
             python -m pip install pythonnet==3.1.0 clr_loader==0.3.1
           else
