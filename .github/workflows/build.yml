@@ -19,10 +19,12 @@ jobs:
           - os: windows-latest
             platform: windows
             artifact: frpC-windows-amd64
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04        # 当前 ubuntu-latest；含 webkit2gtk-4.1 + libgirepository-2.0
             platform: linux
             artifact: frpC-linux-amd64
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"            # 强制 Python UTF-8 模式，避免 Windows runner 的 cp1252 代码页导致中文 print 崩溃
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,15 +34,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Linux：pywebview gtk 后端需要 WebKit2GTK 4.0 + PyGObject 编译依赖
+      # Linux：pywebview gtk 后端优先 WebKit2 4.1（回退 4.0），24.04 提供 4.1 + girepository-2.0
       - name: Install Linux GUI deps
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgtk-3-0 libwebkit2gtk-4.0-37 \
-            gir1.2-webkit2-4.0 gir1.2-gtk-3.0 \
-            libgirepository1.0-dev libcairo2-dev python3-dev pkg-config
+            libgtk-3-0 libwebkit2gtk-4.1-0 \
+            gir1.2-webkit2-4.1 gir1.2-gtk-3.0 \
+            libgirepository-2.0-dev libcairo2-dev python3-dev pkg-config
 
       - name: Install Python deps
         shell: bash
@@ -50,6 +52,7 @@ jobs:
           if [ "${{ matrix.platform }}" = "windows" ]; then
             python -m pip install pythonnet==3.1.0 clr_loader==0.3.1
           else
+            # ubuntu-24.04 提供 libgirepository-2.0，直接用最新 PyGObject（无需降级）
             python -m pip install pygobject
           fi
 
