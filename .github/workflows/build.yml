@@ -1,17 +1,54 @@
 name: Build frpC
 
 on:
-  workflow_dispatch:          # 手动触发
-  push:
-    tags:
-      - "v*"                  # 打 tag 时自动构建并发布 Release
-  pull_request:               # PR 时仅构建验证（不发 Release）
+  workflow_dispatch:          # 手动触发：总是构建并发布
+  schedule:
+    - cron: '0 0 * * *'       # 每天 UTC 0 点检查 frp 官方是否有新版本
 
 permissions:
   contents: write             # 允许创建 GitHub Release
 
 jobs:
+  # 第一步：检测 frp 最新版本、决定是否构建、生成 Release tag 名
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.detect.outputs.version }}
+      tag: ${{ steps.detect.outputs.tag }}
+      should_build: ${{ steps.decide.outputs.should_build }}
+    steps:
+      - name: Detect latest frp version
+        id: detect
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/fatedier/frp/releases/latest \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "tag=v${LATEST}-${TS}" >> "$GITHUB_OUTPUT"
+          echo "检测到 frp 最新版本：$LATEST"
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手动触发，总是构建"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            V="${{ steps.detect.outputs.version }}"
+            HAS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" \
+              | python3 -c "import sys,json; rs=json.load(sys.stdin); v='$V'; print('true' if any(r['tag_name'].startswith('v'+v+'-') for r in rs) else 'false')")
+            if [ "$HAS" = "true" ]; then
+              echo "版本 $V 已发布过，跳过本次构建"
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "发现新版本 $V，开始构建"
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
   build:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -19,7 +56,7 @@ jobs:
           - os: windows-latest
             platform: windows
             artifact: frpC-windows-amd64
-          - os: ubuntu-24.04        # 当前 ubuntu-latest；含 webkit2gtk-4.1 + libgirepository-2.0
+          - os: ubuntu-24.04        # 含 webkit2gtk-4.1 + libgirepository-2.0
             platform: linux
             artifact: frpC-linux-amd64
     runs-on: ${{ matrix.os }}
@@ -27,10 +64,10 @@ jobs:
       PYTHONUTF8: "1"            # 强制 Python UTF-8 模式，避免 Windows runner 的 cp1252 代码页导致中文 print 崩溃
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -52,12 +89,11 @@ jobs:
           if [ "${{ matrix.platform }}" = "windows" ]; then
             python -m pip install pythonnet==3.1.0 clr_loader==0.3.1
           else
-            # ubuntu-24.04 提供 libgirepository-2.0，直接用最新 PyGObject（无需降级）
             python -m pip install pygobject
           fi
 
       - name: Fetch frpc binary
-        run: python scripts/fetch_frpc.py --platform ${{ matrix.platform }}
+        run: python scripts/fetch_frpc.py --platform ${{ matrix.platform }} --version ${{ needs.prepare.outputs.version }}
 
       - name: Run tests
         run: python -m pytest tests/ -q
@@ -75,24 +111,25 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: |
             dist/frpC-*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, prepare]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: frpc v${{ needs.prepare.outputs.version }}
           files: dist/**/*
           generate_release_notes: true
