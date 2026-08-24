@@ -22,6 +22,15 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+# 兜底：Windows 默认代码页（本地 GBK / CI 的 cp1252）无法编码中文，print 中文会抛
+# UnicodeEncodeError。统一把标准输出/错误重配为 UTF-8，确保任何环境下中文可正常输出。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        if _stream.encoding and _stream.encoding.lower() not in ("utf-8", "utf8"):
+            _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 FRP_VERSION = "0.70.1"
 BASE_URL = f"https://github.com/fatedier/frp/releases/download/v{FRP_VERSION}"
 
