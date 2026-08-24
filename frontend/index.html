@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>frpC</title>
+<!--APP_CSS-->
+</head>
+<body>
+<div id="app">
+  <!-- 顶部状态栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">frp</span><span class="logo-c">C</span>
+      <span class="brand-sub">frpc 图形化管理</span>
+    </div>
+    <div class="stats">
+      <div class="stat" id="stat-version" title="frp 版本">
+        <span class="stat-label">版本</span><span class="stat-value">—</span>
+      </div>
+      <div class="stat" id="stat-link" title="连接状态">
+        <span class="dot"></span><span class="stat-label">连接</span><span class="stat-value">—</span>
+      </div>
+      <div class="stat" id="stat-run" title="运行状态">
+        <span class="dot"></span><span class="stat-label">运行</span><span class="stat-value">—</span>
+      </div>
+      <div class="stat" id="stat-latency" title="服务器延迟（TCP 连接往返耗时）">
+        <span class="dot"></span><span class="stat-label">延迟</span><span class="stat-value">—</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn ghost" id="btn-theme" title="切换主题">🌗</button>
+      <button class="btn ghost" id="btn-refresh" title="刷新">刷新</button>
+    </div>
+  </header>
+
+  <!-- Tab 切换 -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="rules">规则</button>
+    <button class="tab" data-tab="settings">设置</button>
+    <button class="tab" data-tab="logs">日志</button>
+  </nav>
+
+  <main class="content">
+    <!-- 规则页 -->
+    <section class="panel active" id="panel-rules">
+      <div class="toolbar">
+        <button class="btn primary" id="btn-new">+ 新建规则</button>
+        <button class="btn" id="btn-edit">编辑</button>
+        <button class="btn danger-ghost" id="btn-del">删除</button>
+        <div class="spacer"></div>
+        <button class="btn success" id="btn-start">启动</button>
+        <button class="btn warn" id="btn-stop">停止</button>
+        <button class="btn" id="btn-reload">重载配置</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>名称</th><th>类型</th><th>本地地址</th><th>远程/域名</th><th>状态</th></tr>
+          </thead>
+          <tbody id="rule-body"></tbody>
+        </table>
+        <div class="empty" id="rule-empty">暂无规则，点击「新建规则」开始。</div>
+      </div>
+    </section>
+
+    <!-- 设置页 -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h3>服务器配置</h3>
+        <div class="form-grid">
+          <label>服务器地址<input id="srv-addr" type="text" placeholder="frp.example.com" /></label>
+          <label>服务器端口<input id="srv-port" type="text" placeholder="7000" /></label>
+          <label class="full">鉴权 Token<input id="srv-token" type="password" placeholder="留空则不鉴权" /></label>
+        </div>
+        <button class="btn primary" id="btn-save-common">保存服务器配置</button>
+        <p class="hint">提示：frpc 启动需要此配置。保存后程序会在 frpc.toml 写入 serverAddr / serverPort / auth.token。</p>
+      </div>
+
+      <div class="card">
+        <h3>运行管理</h3>
+        <div class="switch-row">
+          <div class="switch-info">
+            <div class="switch-title">系统服务</div>
+            <div class="switch-desc">以 Windows 服务方式运行 frpc（开机后台运行，需管理员）</div>
+            <div class="switch-state" id="svc-state">状态：—</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="svc-toggle" /><span class="slider"></span></label>
+        </div>
+        <div class="switch-row">
+          <div class="switch-info">
+            <div class="switch-title">开机自启</div>
+            <div class="switch-desc">本程序随系统启动并最小化（注册表 Run 项）</div>
+            <div class="switch-state" id="boot-state">状态：—</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="boot-toggle" /><span class="slider"></span></label>
+        </div>
+        <button class="btn ghost" id="btn-check-mgmt">检查状态</button>
+      </div>
+    </section>
+
+    <!-- 日志页 -->
+    <section class="panel" id="panel-logs">
+      <div class="toolbar">
+        <span class="hint" id="log-path">日志文件：—</span>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="btn-log-clear">清空日志</button>
+        <button class="btn" id="btn-log-refresh">刷新</button>
+      </div>
+      <pre class="log-view" id="log-view">（暂无日志，启动 frpc 后此处会显示运行日志）</pre>
+    </section>
+  </main>
+
+  <footer class="statusbar" id="footer">就绪</footer>
+</div>
+
+<!-- 新建/编辑规则弹窗 -->
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">新建规则</h3>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <label>规则名称<input id="p-name" type="text" placeholder="ssh / web" /></label>
+        <label>类型
+          <select id="p-type">
+            <option value="tcp">tcp</option>
+            <option value="udp">udp</option>
+            <option value="http">http</option>
+            <option value="https">https</option>
+            <option value="stcp">stcp</option>
+            <option value="xtcp">xtcp</option>
+          </select>
+        </label>
+        <label>本地地址<input id="p-localIP" type="text" placeholder="127.0.0.1" /></label>
+        <label>本地端口<input id="p-localPort" type="text" placeholder="22" /></label>
+        <label id="row-remote">远程端口<input id="p-remotePort" type="text" placeholder="6000" /></label>
+        <label id="row-domain" class="hidden">域名 (逗号分隔)<input id="p-domain" type="text" placeholder="app.example.com" /></label>
+        <label id="row-subdomain" class="hidden">子域名<input id="p-subdomain" type="text" placeholder="myapp" /></label>
+        <label id="row-secret" class="hidden">密钥 secretKey<input id="p-secret" type="text" placeholder="自定义共享密钥" /></label>
+        <label class="checkline"><input type="checkbox" id="p-compress" /> 启用压缩 (useCompression)</label>
+      </div>
+      <div class="errors" id="p-errors"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="modal-cancel">取消</button>
+      <button class="btn primary" id="modal-ok" disabled>确认</button>
+    </div>
+  </div>
+</div>
+
+<!--APP_JS-->
+</body>
+</html>

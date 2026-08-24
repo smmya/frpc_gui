@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 测试与构建产物
+.pytest_cache/
+.pytest_tmp/
+build/
+dist/
+build_venv*/
+*.spec.bak
+
+# 测试运行时产生的临时目录
+api_*/
+frpgui_test_*/
+dbg_*/
+save_*/
+logtest_*/
+
+# 由 scripts/fetch_frpc.py 下载生成（不入库，CI/本地构建前拉取）
+vendor/
+
+# 杂项
+*.log
+.DS_Store

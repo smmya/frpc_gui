@@ -1,0 +1,22 @@
+serverAddr = "frp.example.com"
+serverPort = 7000
+auth.token = "your_token"
+adminAddr = "127.0.0.1"
+adminPort = 7400
+adminUser = "admin"
+adminPwd = "admin"
+
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6000
+
+[[proxies]]
+name = "web"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 80
+customDomains = [ "app.example.com" ]
+useCompression = true
