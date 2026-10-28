@@ -12,6 +12,8 @@ jobs:
   # 第一步：检测 frp 最新版本、决定是否构建、生成 Release tag 名
   prepare:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     outputs:
       version: ${{ steps.detect.outputs.version }}
       tag: ${{ steps.detect.outputs.tag }}
@@ -20,8 +22,15 @@ jobs:
       - name: Detect latest frp version
         id: detect
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/fatedier/frp/releases/latest \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          set -euo pipefail
+          LATEST_TAG=$(curl --fail --silent --show-error --location \
+            --retry 4 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/fatedier/frp/releases/latest \
+            | jq -er '.tag_name | select(type == "string" and test("^v[0-9]+[.]"))')
+          LATEST="${LATEST_TAG#v}"
           TS=$(date -u +%Y%m%d-%H%M%S)
           echo "version=$LATEST" >> "$GITHUB_OUTPUT"
           echo "tag=v${LATEST}-${TS}" >> "$GITHUB_OUTPUT"
@@ -30,13 +39,19 @@ jobs:
       - name: Decide whether to build
         id: decide
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "手动触发，总是构建"
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             V="${{ steps.detect.outputs.version }}"
-            HAS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" \
-              | python3 -c "import sys,json; rs=json.load(sys.stdin); v='$V'; print('true' if any(r['tag_name'].startswith('v'+v+'-') for r in rs) else 'false')")
+            HAS=$(curl --fail --silent --show-error --location \
+              --retry 4 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -r --arg v "$V" 'if type == "array" then any(.[]; (.tag_name // "") | startswith("v" + $v + "-")) else error("Unexpected releases response") end')
             if [ "$HAS" = "true" ]; then
               echo "版本 $V 已发布过，跳过本次构建"
               echo "should_build=false" >> "$GITHUB_OUTPUT"
