@@ -150,3 +150,48 @@ jobs:
           name: frpc v${{ needs.prepare.outputs.version }}
           files: dist/**/*
           generate_release_notes: true
+
+  # Keep only the latest five Actions runs for this workflow (not Releases).
+  cleanup:
+    name: Retain last 5 runs
+    needs: [prepare, build, release]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete older completed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # GitHub returns runs newest first; --paginate handles histories over 100 runs.
+          RUNS=$(gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?per_page=100" \
+            --jq '.workflow_runs[] | [.id, .status] | @tsv')
+
+          INDEX=0
+          DELETED=0
+          while IFS=$'\t' read -r RUN_ID STATUS; do
+            [[ -n "$RUN_ID" ]] || continue
+            INDEX=$((INDEX + 1))
+
+            # The five newest records are preserved, regardless of status.
+            if (( INDEX <= 5 )); then
+              continue
+            fi
+
+            # Do not delete this job or any other unfinished run.
+            if [[ "$RUN_ID" == "$GITHUB_RUN_ID" || "$STATUS" != "completed" ]]; then
+              echo "Skip active run $RUN_ID ($STATUS)"
+              continue
+            fi
+
+            echo "Delete old workflow run $RUN_ID"
+            gh api -X DELETE "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+            DELETED=$((DELETED + 1))
+          done <<< "$RUNS"
+
+          echo "Checked $INDEX workflow runs; deleted $DELETED old completed runs."
